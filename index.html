@@ -1,0 +1,825 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ระบบเสนอราคาเบี้ยประกัน</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+  <script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
+</head>
+<body class="bg-gray-100 p-4 md:p-6">
+
+  <!-- ส่วนกำลังโหลด -->
+  <div id="loading-section" class="max-w-md mx-auto mt-20 text-center">
+    <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+    <p class="text-gray-600 font-semibold" id="loading-text">กำลังตรวจสอบสิทธิ์ระบบ...</p>
+  </div>
+
+  <!-- ส่วนฟอร์มลงทะเบียน -->
+  <div id="register-section" class="hidden max-w-md mx-auto bg-white p-6 rounded shadow mt-10">
+    <h2 class="text-xl font-bold text-blue-800 mb-2 text-center">ลงทะเบียนตัวแทนใหม่</h2>
+    <p class="text-xs text-gray-500 mb-4 text-center">กรุณากรอกข้อมูลเพื่อขออนุมัติใช้งานระบบ</p>
+    <div class="space-y-3">
+      <div>
+        <label class="text-xs font-bold text-gray-700">ชื่อ - นามสกุล</label>
+        <input type="text" id="reg-name" placeholder="ระบุชื่อ-นามสกุลจริง" class="border p-2 rounded w-full text-sm mt-1">
+      </div>
+      <div>
+        <label class="text-xs font-bold text-gray-700">เบอร์โทรศัพท์</label>
+        <input type="tel" id="reg-phone" placeholder="เบอร์โทรติดต่อ" class="border p-2 rounded w-full text-sm mt-1">
+      </div>
+      <div>
+        <label class="text-xs font-bold text-gray-700">LINE User ID ของคุณ</label>
+        <input type="text" id="reg-uid" readonly class="border p-2 rounded w-full text-sm bg-gray-100 text-gray-500 mt-1">
+      </div>
+      <button onclick="submitRegistration()" class="w-full bg-green-600 text-white p-2 rounded font-bold hover:bg-green-700 mt-2">
+        1️⃣ ส่งคำขอลงทะเบียน
+      </button>
+    </div>
+  </div>
+
+  <!-- ส่วนรอนุมัติสิทธิ์ -->
+  <div id="pending-section" class="hidden max-w-md mx-auto bg-white p-6 rounded shadow mt-10 text-center">
+    <h2 class="text-xl font-bold text-yellow-600 mb-2">⏳ ส่งคำขอลงทะเบียนเรียบร้อย</h2>
+    <p class="text-sm text-gray-600">กรุณารอผู้ดูแลระบบตรวจสอบและอนุมัติสิทธิ์ในระบบ จึงจะสามารถใช้งานได้ครับ</p>
+  </div>
+
+  <div id="app-section" class="hidden max-w-4xl mx-auto bg-white p-6 rounded shadow mt-2">
+    
+    <div class="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 border-b pb-4 gap-2">
+      <div>
+        <h2 class="text-2xl font-bold text-blue-800">สร้างใบเสนอราคาประกันภัย</h2>
+        <p class="text-xs text-gray-500">วันที่นำเสนอ: <span id="current-date"></span></p>
+      </div>
+      <span id="agent-info-display" class="text-sm text-gray-700 font-semibold bg-blue-50 px-3 py-1 rounded border border-blue-200"></span>
+    </div>
+
+    <!-- 1. ส่วนเลือกเงื่อนไข -->
+    <div class="mb-6 p-4 bg-gray-50 rounded border no-print">
+      <h3 class="font-bold mb-3 text-gray-800">1. เลือกแบบประกันและเงื่อนไขรถยนต์</h3>
+      
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-3 mb-3">
+        <!-- ประเภทประกัน -->
+        <select id="ins-type" onchange="fetchPlans()" class="border p-2 rounded w-full bg-white text-black">
+          <option value="">-- ประเภทประกัน --</option>
+        </select>
+
+        <!-- บริษัทประกัน -->
+        <select id="ins-company" onchange="fetchPlans()" class="border p-2 rounded w-full bg-white text-black">
+          <option value="">-- เลือกบริษัทฯ ประกัน --</option>
+        </select>
+      </div>
+
+      <div class="mb-3">
+        <!-- เลือกแผนประกัน -->
+        <select id="ins-plan" onchange="onPlanSelected()" class="border p-2 rounded w-full bg-white text-black">
+          <option value="">-- เลือกแผนประกัน --</option>
+        </select>
+      </div>
+
+      <!-- ลำดับ: แผนประกัน -> ทุนประกัน -> ประเภทรถ -> พื้นที่ -> เบี้ยประกัน -->
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-3 mb-3">
+        <div id="sum-insured-container">
+          <select id="ins-sum-insured" class="border p-2 rounded w-full bg-white text-black">
+            <option value="">-- เลือกทุนประกัน --</option>
+          </select>
+        </div>
+
+        <div>
+          <select id="car-type" onchange="checkCarTypeOther(); calculateFinalPremium();" class="border p-2 rounded w-full bg-white text-black">
+            <option value="">-- เลือกประเภทรถ --</option>
+          </select>
+          <input type="text" id="car-type-other" placeholder="ระบุประเภทรถ..." class="border p-2 rounded w-full mt-2 hidden">
+        </div>
+      </div>
+
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-3 mb-3">
+        <div id="location-container">
+          <select id="car-location" onchange="calculateFinalPremium()" class="border p-2 rounded w-full bg-white text-black">
+            <option value="">-- เลือกพื้นที่ / เงื่อนไข --</option>
+          </select>
+        </div>
+
+        <input type="number" id="ins-premium" placeholder="เบี้ยรวมสุทธิ (บาท)" class="border p-2 rounded w-full bg-yellow-50">
+      </div>
+
+      <button onclick="addCompare()" class="w-full bg-blue-600 text-white rounded p-2 font-semibold hover:bg-blue-700 transition">
+        + เพิ่มเปรียบเทียบ
+      </button>
+    </div>
+
+    <!-- 2. ตารางเปรียบเทียบ -->
+    <div class="mb-6">
+      <h3 class="font-bold mb-3 text-gray-800">2. ตารางเปรียบเทียบเบี้ยประกันและค่าคอมมิชชัน</h3>
+      <div class="overflow-x-auto">
+        <table class="w-full border-collapse border text-xs text-center bg-white">
+          <thead>
+            <tr class="bg-blue-100 text-blue-900">
+              <th class="border p-2">บริษัท</th>
+              <th class="border p-2">แผน / ประเภท</th>
+              <th class="border p-2">ทุนประกัน</th>
+              <th class="border p-2">เบี้ยรวมสุทธิ</th>
+              <th class="border p-2 text-red-600 agent-only">ค่าคอมฯ (ส่วนต่างแต่ละชั้น / Total)</th>
+              <th class="border p-2 no-print">จัดการ</th>
+            </tr>
+          </thead>
+          <tbody id="compare-table-body">
+            <tr id="empty-row"><td colspan="6" class="p-6 text-gray-400">ยังไม่มีข้อมูลเปรียบเทียบ</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- 3. ข้อมูลลูกค้าและรถยนต์ -->
+    <div class="mb-6 p-4 bg-gray-50 rounded border">
+      <h3 class="font-bold mb-3 text-gray-800">3. ข้อมูลลูกค้าและรถยนต์</h3>
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+        <input type="text" id="cust-name" placeholder="ชื่อผู้เอาประกันภัย" class="border p-2 rounded w-full">
+        <input type="text" id="car-reg" placeholder="ทะเบียนรถ" class="border p-2 rounded w-full">
+        <input type="text" id="car-model" placeholder="ยี่ห้อ / รุ่นรถ" class="border p-2 rounded w-full">
+      </div>
+    </div>
+
+    <!-- ปุ่ม Action หลัก -->
+    <div class="flex flex-col md:flex-row gap-3 mt-8 no-print">
+      <button onclick="openPreview()" class="w-full bg-red-500 text-white px-4 py-3 rounded font-bold shadow hover:bg-red-600">
+        📄 ดูตัวอย่างเอกสารเสนอราคา (A4)
+      </button>
+      <button onclick="saveAndSendLINE()" class="w-full bg-green-500 text-white px-4 py-3 rounded font-bold shadow hover:bg-green-600">
+        💬 บันทึกและส่ง Flex Message ให้ลูกค้า
+      </button>
+    </div>
+
+    <!-- 4. ส่วนจัดการใบเสนอราคาเดิม -->
+    <div class="mt-10 pt-6 border-t">
+      <h3 class="font-bold mb-3 text-gray-800">📋 ติดตาม / แก้ไขใบเสนอราคาเดิม</h3>
+      <button onclick="loadAgentQuotations()" class="bg-gray-700 text-white px-4 py-2 rounded text-sm mb-3">🔄 โหลดรายการของฉัน</button>
+      <div class="overflow-x-auto">
+        <table class="w-full border-collapse border text-xs text-center bg-white">
+          <thead>
+            <tr class="bg-gray-100 text-gray-800">
+              <th class="border p-2">เลขที่</th>
+              <th class="border p-2">วันที่</th>
+              <th class="border p-2">ลูกค้า</th>
+              <th class="border p-2">ทะเบียนรถ</th>
+              <th class="border p-2">สถานะ</th>
+              <th class="border p-2">จัดการ</th>
+            </tr>
+          </thead>
+          <tbody id="quotation-history-body">
+            <tr><td colspan="6" class="p-4 text-gray-400">ยังไม่ได้โหลดรายการ</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- Modal A4 -->
+  <div id="pdf-preview-modal" class="hidden fixed inset-0 bg-black bg-opacity-60 z-50 flex justify-center items-center p-2">
+    <div class="bg-white w-full max-w-2xl p-6 rounded shadow-lg max-h-[90vh] overflow-y-auto">
+      <div class="flex justify-between items-center border-b pb-3 mb-4">
+        <h3 class="text-lg font-bold text-blue-900">ตัวอย่างเอกสารใบเสนอราคา (A4)</h3>
+        <button onclick="closePreview()" class="text-gray-500 font-bold text-xl">&times;</button>
+      </div>
+      
+      <div id="a4-document" class="p-6 border bg-white text-black text-sm rounded">
+        <div class="text-center font-bold text-xl mb-1 text-blue-800">ใบเสนอราคาประกันภัยรถยนต์</div>
+        <div class="flex justify-between mb-4 text-xs text-gray-600 border-b pb-2">
+          <span>วันที่: <span id="preview-date"></span></span>
+          <span>ตัวแทน: <span id="preview-agent"></span></span>
+        </div>
+        <div class="mb-4 p-3 bg-gray-50 border rounded text-xs">
+          <p><b>ชื่อผู้เอาประกัน:</b> <span id="preview-cust">-</span></p>
+          <p><b>ทะเบียนรถ / รุ่น:</b> <span id="preview-car">-</span></p>
+        </div>
+        <div id="preview-table-container" class="mb-6"></div>
+        <div class="text-center text-xs text-gray-400 mt-8">เอกสารนี้จัดทำขึ้นเพื่อการเสนอราคาเบี้ยประกันภัยเท่านั้น</div>
+      </div>
+
+      <div id="image-preview-container" class="hidden mt-4 text-center">
+        <p class="text-xs text-green-600 font-bold mb-2">👇 กดค้างที่รูปภาพด้านล่างเพื่อ "บันทึกภาพ" หรือ "แชร์ต่อ" ได้เลยครับ</p>
+        <div id="image-output" class="border p-2 rounded bg-gray-50 flex justify-center"></div>
+      </div>
+
+      <div class="flex flex-col md:flex-row gap-2 mt-4">
+        <button onclick="convertA4ToImage()" class="w-full bg-red-600 text-white py-2 rounded font-bold hover:bg-red-700">📥 แปลงตารางเป็นรูปภาพ (เซฟ/แชร์)</button>
+        <button onclick="sendFlexFromPreview()" class="w-full bg-green-600 text-white py-2 rounded font-bold hover:bg-green-700">💬 ส่ง Flex Message ให้ลูกค้า</button>
+        <button onclick="closePreview()" class="w-full bg-gray-300 text-gray-700 py-2 rounded font-bold hover:bg-gray-400">ปิดหน้าต่าง</button>
+      </div>
+    </div>
+  </div>
+    
+  <script>
+    let currentAgent = null;
+    let currentUserLineId = "";
+    let comparisonItems = [];
+    let availablePlansCache = [];
+    let editingQuoteId = null;
+    let GAS_API_URL = "";
+    let LIFF_ID = "";
+
+    const urlParams = new URLSearchParams(window.location.search);
+    const accountKey = urlParams.get('account') || 'FFB';
+    const CENTRAL_GAS_URL = "https://script.google.com/macros/s/AKfycbyhbGAtBGW8InYXMGd3Lbf4iPGrHmB9x7T8CdLx2lpVXOV-K9YutBF0B5e6CPjiK6eeIw/exec";
+
+    function initSystemConfig() {
+      fetch(CENTRAL_GAS_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+        body: JSON.stringify({ action: 'getConfig', accountKey: accountKey })
+      })
+      .then(res => res.json())
+      .then(config => {
+        if (config.status === 'success') {
+          LIFF_ID = config.liffId;
+          GAS_API_URL = config.gasUrl;
+          startLiffApp();
+        } else {
+          alert("ไม่พบข้อมูลการตั้งค่าของบัญชีนี้ในระบบ");
+        }
+      })
+      .catch(err => {
+        console.error("Config Error: ", err);
+        alert("ไม่สามารถเชื่อมต่อระบบกลางได้");
+      });
+    }
+
+    window.onload = () => {
+      const n = new Date();
+      document.getElementById('current-date').innerText = `${n.getDate()}/${n.getMonth()+1}/${n.getFullYear()+543}`;
+      initSystemConfig();
+    };
+
+    function startLiffApp() {
+      liff.init({ liffId: LIFF_ID }).then(() => {
+        if (!liff.isLoggedIn()) {
+          liff.login();
+        } else {
+          liff.getProfile().then(profile => {
+            currentUserLineId = profile.userId;
+            checkAgentStatus(currentUserLineId);
+          });
+        }
+      }).catch(err => {
+        console.error("LIFF Initialization failed", err);
+      });
+    }
+
+    function checkAgentStatus(uid) {
+      fetch(GAS_API_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+        body: JSON.stringify({ action: 'checkLogin', uid: uid })
+      })
+      .then(res => res.json())
+      .then(result => {
+        document.getElementById('loading-section').classList.add('hidden');
+        if (result.status === 'success' && result.data) {
+          currentAgent = result.data;
+          if (currentAgent.status === 'Active') {
+            document.getElementById('agent-info-display').innerText = `ตัวแทน: ${currentAgent.name} (ระดับ: ${currentAgent.level})`;
+            document.getElementById('app-section').classList.remove('hidden');
+            loadMetadata(); 
+            loadAgentQuotations();
+          } else {
+            document.getElementById('pending-section').classList.remove('hidden');
+          }
+        } else {
+          document.getElementById('reg-uid').value = uid;
+          document.getElementById('register-section').classList.remove('hidden');
+        }
+      });
+    }
+
+    function submitRegistration() {
+      const name = document.getElementById('reg-name').value.trim();
+      const phone = document.getElementById('reg-phone').value.trim();
+      if(!name || !phone) return alert("กรุณากรอกชื่อและเบอร์โทรศัพท์ให้ครบถ้วน");
+
+      fetch(GAS_API_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+        body: JSON.stringify({ action: 'register', formData: { name: name, phone: phone, uid: currentUserLineId } })
+      })
+      .then(res => res.json())
+      .then(result => {
+        if(result.status === 'success') {
+          document.getElementById('register-section').classList.add('hidden');
+          document.getElementById('pending-section').classList.remove('hidden');
+          alert("ส่งคำขอลงทะเบียนสำเร็จ!");
+        }
+      });
+    }
+
+    function loadMetadata() {
+      fetch(GAS_API_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+        body: JSON.stringify({ action: 'getMetadata' })
+      })
+      .then(res => res.json())
+      .then(result => {
+        if(result.status === 'success') {
+          const selectComp = document.getElementById('ins-company');
+          selectComp.innerHTML = '<option value="">-- เลือกบริษัทฯ ประกัน --</option>';
+          if(result.companies) {
+            result.companies.forEach(comp => {
+              selectComp.innerHTML += `<option value="${comp}">${comp}</option>`;
+            });
+          }
+
+          const selectType = document.getElementById('ins-type');
+          selectType.innerHTML = '<option value="">-- ประเภทประกัน --</option>';
+          if(result.types) {
+            result.types.forEach(type => {
+              selectType.innerHTML += `<option value="${type}">${type}</option>`;
+            });
+          }
+
+          const selectCarType = document.getElementById('car-type');
+          selectCarType.innerHTML = '<option value="">-- เลือกประเภทรถ --</option>';
+          if(result.carTypes) {
+            result.carTypes.forEach(carT => {
+              selectCarType.innerHTML += `<option value="${carT}">${carT}</option>`;
+            });
+          }
+          selectCarType.innerHTML += `<option value="อื่นๆ">อื่นๆ (ระบุเอง)</option>`;
+        }
+      });
+    }
+
+    function fetchPlans() {
+      const type = document.getElementById('ins-type').value;
+      const company = document.getElementById('ins-company').value;
+      
+      document.getElementById('ins-plan').innerHTML = '<option value="">-- เลือกแผนประกัน --</option>';
+      document.getElementById('sum-insured-container').innerHTML = `<select id="ins-sum-insured" class="border p-2 rounded w-full bg-white text-black"><option value="">-- เลือกทุนประกัน --</option></select>`;
+      document.getElementById('ins-premium').value = '';
+      updateLocationInput([]);
+
+      if(!company || !type) return;
+
+      fetch(GAS_API_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+        body: JSON.stringify({ action: 'getPlans', company: company, type: type, carType: '' })
+      })
+      .then(res => res.json())
+      .then(result => {
+        if(result.status === 'success') {
+          availablePlansCache = result.data || [];
+          const planSelect = document.getElementById('ins-plan');
+          planSelect.innerHTML = '<option value="">-- เลือกแผนประกัน --</option>';
+          
+          let uniquePlans = [];
+          availablePlansCache.forEach((p) => {
+            if (!uniquePlans.includes(p.plan)) {
+              uniquePlans.push(p.plan);
+              planSelect.innerHTML += `<option value="${p.plan}">${p.plan}</option>`;
+            }
+          });
+        }
+      });
+    }
+
+    function onPlanSelected() {
+      const selectedPlanName = document.getElementById('ins-plan').value;
+      const container = document.getElementById('sum-insured-container');
+      
+      document.getElementById('ins-premium').value = ''; 
+
+      if(!selectedPlanName) {
+        container.innerHTML = `<select id="ins-sum-insured" class="border p-2 rounded w-full bg-white text-black"><option value="">-- เลือกทุนประกัน --</option></select>`;
+        updateLocationInput([]);
+        return;
+      }
+      
+      const matchedPlans = availablePlansCache.filter(p => p.plan === selectedPlanName);
+      
+      let sumList = [];
+      matchedPlans.forEach(p => {
+        if (p.sumInsuredList && p.sumInsuredList.length > 0) {
+          p.sumInsuredList.forEach(s => {
+            if (s && s !== "" && s !== "-" && !sumList.includes(String(s))) {
+              sumList.push(String(s));
+            }
+          });
+        } else if (p.sumInsured && p.sumInsured !== "" && p.sumInsured !== "-" && !sumList.includes(String(p.sumInsured))) {
+          sumList.push(String(p.sumInsured));
+        }
+      });
+
+      if (sumList.length > 0) {
+        if (sumList.length === 1) {
+          container.innerHTML = `<input type="text" id="ins-sum-insured" value="${sumList[0]}" readonly class="border p-2 rounded w-full bg-gray-100 text-black">`;
+        } else {
+          let html = '<select id="ins-sum-insured" onchange="calculateFinalPremium()" class="border p-2 rounded w-full bg-white text-black">';
+          html += '<option value="">-- เลือกทุนประกัน --</option>';
+          sumList.forEach(sum => {
+            html += `<option value="${sum}">${Number(sum).toLocaleString()} บาท</option>`;
+          });
+          html += '</select>';
+          container.innerHTML = html;
+        }
+      } else {
+        container.innerHTML = `<input type="text" id="ins-sum-insured" placeholder="กรอกทุนประกัน..." oninput="calculateFinalPremium()" class="border p-2 rounded w-full bg-white text-black">`;
+      }
+
+      let locList = [];
+      matchedPlans.forEach(p => {
+        if (p.locations && p.locations.length > 0) {
+          p.locations.forEach(l => {
+            if (l && l !== "-" && l.trim() !== "" && !locList.includes(l)) {
+              locList.push(l);
+            }
+          });
+        } else if (p.location && p.location !== "-" && p.location.trim() !== "" && !locList.includes(p.location)) {
+          locList.push(p.location);
+        }
+      });
+      updateLocationInput(locList);
+      calculateFinalPremium();
+    }
+
+    function calculateFinalPremium() {
+      const type = document.getElementById('ins-type').value;
+      const company = document.getElementById('ins-company').value;
+      const selectedPlanName = document.getElementById('ins-plan').value;
+      const carType = document.getElementById('car-type').value;
+      const locElement = document.getElementById('car-location');
+      const location = locElement ? locElement.value : "";
+      const sumInsuredEl = document.getElementById('ins-sum-insured');
+      const sumInsured = sumInsuredEl ? sumInsuredEl.value : "";
+
+      if (!type || !company || !selectedPlanName || !sumInsured || !carType) {
+        document.getElementById('ins-premium').value = '';
+        return;
+      }
+
+      fetch(GAS_API_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+        body: JSON.stringify({ 
+          action: 'getCommRate', 
+          company: company, 
+          type: type, 
+          plan: selectedPlanName, 
+          carType: carType, 
+          location: location, 
+          sumInsured: sumInsured, 
+          premium: 0, 
+          level: currentAgent ? currentAgent.level : 'AG' 
+        })
+      })
+      .then(res => res.json())
+      .then(result => {
+        if (result.status === 'success' && result.data && result.data.grossPremium > 0) {
+          document.getElementById('ins-premium').value = result.data.grossPremium;
+        } else {
+          document.getElementById('ins-premium').value = '';
+        }
+      })
+      .catch(err => {
+        console.error("Calculate Premium Error:", err);
+      });
+    }
+
+    function updateLocationInput(locations) {
+      const container = document.getElementById('location-container');
+      const existingEl = document.getElementById('car-location');
+      const currentValue = existingEl ? existingEl.value : "";
+
+      if (locations && locations.length > 0 && locations[0] !== "") {
+        let html = '<select id="car-location" onchange="calculateFinalPremium()" class="border p-2 rounded w-full bg-white text-black">';
+        html += '<option value="">-- เลือกพื้นที่ / เงื่อนไข --</option>';
+        locations.forEach(loc => {
+          const isSelected = (loc === currentValue || locations.length === 1) ? 'selected' : '';
+          html += `<option value="${loc}" ${isSelected}>${loc}</option>`;
+        });
+        html += '</select>';
+        container.innerHTML = html;
+      } else {
+        container.innerHTML = `<input type="text" id="car-location" value="${currentValue}" placeholder="ระบุพื้นที่ / เงื่อนไข (ถ้ามี)" oninput="calculateFinalPremium()" class="border p-2 rounded w-full bg-white text-black">`;
+      }
+    }
+
+    function addCompare() {
+      const type = document.getElementById('ins-type').value;
+      const carType = document.getElementById('car-type').value;
+      const locElement = document.getElementById('car-location');
+      const location = locElement ? locElement.value : "";
+      const sumInsuredEl = document.getElementById('ins-sum-insured');
+      const sumInsured = sumInsuredEl ? sumInsuredEl.value : "";
+      const company = document.getElementById('ins-company').value;
+      const planName = document.getElementById('ins-plan').value;
+      const premium = document.getElementById('ins-premium').value;
+
+      if(!type || !company || !planName || !sumInsured || !premium) return alert("กรุณากรอกข้อมูลการเปรียบเทียบให้ครบถ้วน");
+
+      fetch(GAS_API_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+        body: JSON.stringify({ action: 'getCommRate', company: company, type: type, plan: planName, carType: carType, location: location, sumInsured: sumInsured, premium: premium, level: currentAgent.level })
+      })
+      .then(res => res.json())
+      .then(result => {
+        const commData = (result.status === 'success') ? result.data.commBreakdown : {};
+        const totalComm = (result.status === 'success') ? result.data.totalComm : 0;
+        const item = { company, type, plan: planName, carType, location, sumInsured, premium, commData, totalComm };
+        comparisonItems.push(item);
+        renderTable();
+        
+        // 🟢 เอาคำสั่งเคลียร์ค่าทิ้งออก เพื่อให้ช่องตัวเลือกด้านบน (ประเภท, บริษัท, แผน, ทุน) ยังคงค้างค่าเดิมไว้ให้แก้ไขเปรียบเทียบต่อได้ทันที
+        // (เคลียร์เฉพาะช่องเบี้ยประกันสุทธิ เพื่อรอคำนวณใหม่เมื่อเปลี่ยนข้อมูล)
+        document.getElementById('ins-premium').value = '';
+      });
+    }
+
+    function renderTable() {
+      const tbody = document.getElementById('compare-table-body');
+      if (comparisonItems.length === 0) {
+        tbody.innerHTML = `<tr id="empty-row"><td colspan="6" class="p-6 text-gray-400">ยังไม่มีข้อมูลเปรียบเทียบ</td></tr>`;
+        return;
+      }
+      tbody.innerHTML = '';
+      comparisonItems.forEach((item, index) => {
+        let commHtml = "";
+        for (let tier in item.commData) {
+          commHtml += `<div class="text-xs"><b>${tier}:</b> +${Number(item.commData[tier].amount).toLocaleString()} บ.</div>`;
+        }
+        commHtml += `<div class="text-xs font-bold text-blue-700 mt-1 border-t pt-1">Total: ${Number(item.totalComm).toLocaleString()} บ.</div>`;
+
+        tbody.innerHTML += `
+          <tr class="border-b hover:bg-gray-50">
+            <td class="border p-2">${item.company}</td>
+            <td class="border p-2">${item.type} ${item.plan ? '('+item.plan+')' : ''}<br><span class="text-xs text-gray-500">${item.carType} / ${item.location}</span></td>
+            <td class="border p-2">${item.sumInsured ? Number(item.sumInsured).toLocaleString() : item.sumInsured}</td>
+            <td class="border p-2 font-semibold">${Number(item.premium).toLocaleString()}</td>
+            <td class="border p-2 text-red-600 font-bold agent-only">${commHtml || '-'}</td>
+            <td class="border p-2 no-print"><button onclick="removeItem(${index})" class="text-red-500 font-bold">X</button></td>
+          </tr>`;
+      });
+    }
+
+    function removeItem(index) {
+      comparisonItems.splice(index, 1);
+      renderTable();
+    }
+
+    function openPreview() {
+      if(comparisonItems.length === 0) return alert("กรุณาเพิ่มรายการเปรียบเทียบอย่างน้อย 1 รายการก่อน");
+      
+      const custName = document.getElementById('cust-name').value.trim();
+      const carReg = document.getElementById('car-reg').value.trim();
+
+      if (custName && carReg) {
+        autoSaveQuoteSilent();
+      }
+
+      document.getElementById('preview-date').innerText = document.getElementById('current-date').innerText;
+      document.getElementById('preview-agent').innerText = currentAgent.name;
+      document.getElementById('preview-cust').innerText = custName || '-';
+      document.getElementById('preview-car').innerText = carReg + ' (' + (document.getElementById('car-model').value || '-') + ')';
+
+      let tableHtml = `<table class="w-full border-collapse border text-xs text-center bg-white">
+        <tr class="bg-gray-200"><th class="border p-1">บริษัท</th><th class="border p-1">แผนประกัน</th><th class="border p-1">ทุนประกัน</th><th class="border p-1">เบี้ยรวมสุทธิ</th></tr>`;
+      comparisonItems.forEach(i => {
+        let sInsured = i.sumInsured ? Number(i.sumInsured).toLocaleString() + " บาท" : "-";
+        tableHtml += `<tr><td class="border p-1">${i.company}</td><td class="border p-1">${i.type} ${i.plan? '('+i.plan+')':''}</td><td class="border p-1">${sInsured}</td><td class="border p-1 font-bold">${Number(i.premium).toLocaleString()} บาท</td></tr>`;
+      });
+      tableHtml += `</table>`;
+      document.getElementById('preview-table-container').innerHTML = tableHtml;
+      
+      document.getElementById('image-preview-container').classList.add('hidden');
+      document.getElementById('image-output').innerHTML = '';
+      document.getElementById('pdf-preview-modal').classList.remove('hidden');
+    }
+
+    function closePreview() {
+      document.getElementById('pdf-preview-modal').classList.add('hidden');
+    }
+
+    function autoSaveQuoteSilent() {
+      const custName = document.getElementById('cust-name').value.trim();
+      const carReg = document.getElementById('car-reg').value.trim();
+      if(!custName || !carReg) return;
+
+      const actionType = editingQuoteId ? 'editQuote' : 'saveQuote';
+      const quotePayload = {
+        quoteId: editingQuoteId || "",
+        agentId: currentAgent.id,
+        customerName: custName,
+        carReg: carReg,
+        items: comparisonItems,
+        targetUserId: "" 
+      };
+
+      fetch(GAS_API_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+        body: JSON.stringify({ action: actionType, quoteData: quotePayload })
+      })
+      .then(res => res.json())
+      .then(result => {
+        if(result.status === 'success' && result.quoteId && !editingQuoteId) {
+          editingQuoteId = result.quoteId; 
+        }
+        loadAgentQuotations();
+      }).catch(err => console.error("AutoSave Error:", err));
+    }
+
+    function saveAndSendLINE() {
+      const custName = document.getElementById('cust-name').value.trim();
+      const carReg = document.getElementById('car-reg').value.trim();
+      if(!custName || !carReg) return alert("กรุณากรอกชื่อลูกค้าและทะเบียนรถก่อนบันทึก");
+      if(comparisonItems.length === 0) return alert("กรุณาเพิ่มรายการเปรียบเทียบอย่างน้อย 1 รายการก่อนบันทึก");
+
+      const targetUserId = prompt("กรุณากรอก LINE User ID ของลูกค้าที่ต้องการส่ง Flex Message (หากไม่กรอก ระบบจะส่งเข้ากลุ่มและบันทึกประวัติให้):") || "";
+      const actionType = editingQuoteId ? 'editQuote' : 'saveQuote';
+
+      const quotePayload = {
+        quoteId: editingQuoteId || "",
+        agentId: currentAgent.id,
+        customerName: custName,
+        carReg: carReg,
+        items: comparisonItems,
+        targetUserId: targetUserId
+      };
+
+      fetch(GAS_API_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+        body: JSON.stringify({ action: actionType, quoteData: quotePayload })
+      })
+      .then(res => res.json())
+      .then(result => {
+        if(result.status === 'success') {
+          alert("บันทึกข้อมูลเรียบร้อยแล้ว!");
+          editingQuoteId = null;
+          comparisonItems = [];
+          renderTable();
+          document.getElementById('cust-name').value = '';
+          document.getElementById('car-reg').value = '';
+          document.getElementById('car-model').value = '';
+          loadAgentQuotations();
+        } else {
+          alert("เกิดข้อผิดพลาดในการบันทึก: " + (result.message || "ไม่ทราบสาเหตุ"));
+        }
+      })
+      .catch(err => {
+        console.error("Save Error:", err);
+        alert("ไม่สามารถเชื่อมต่อเพื่อบันทึกข้อมูลได้");
+      });
+    }
+
+    function loadAgentQuotations() {
+      if(!currentAgent || (!currentAgent.id && !currentUserLineId)) return;
+      const searchId = currentAgent.id || currentUserLineId;
+
+      fetch(GAS_API_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+        body: JSON.stringify({ action: 'getAgentQuotes', agentId: searchId })
+      })
+      .then(res => res.json())
+      .then(result => {
+        if(result.status === 'success') {
+          const tbody = document.getElementById('quotation-history-body');
+          window.myQuotesCache = result.quotes || [];
+          if(!result.quotes || result.quotes.length === 0) {
+            tbody.innerHTML = `<tr><td colspan="6" class="p-4 text-gray-400">ยังไม่มีประวัติใบเสนอราคา</td></tr>`;
+            return;
+          }
+          tbody.innerHTML = '';
+          result.quotes.forEach((q, idx) => {
+            tbody.innerHTML += `
+              <tr class="border-b">
+                <td class="border p-2">${q.quoteId}</td>
+                <td class="border p-2">${q.date}</td>
+                <td class="border p-2">${q.customerName}</td>
+                <td class="border p-2">${q.carReg}</td>
+                <td class="border p-2 font-semibold text-blue-600">${q.status}</td>
+                <td class="border p-2 flex gap-1 justify-center">
+                  <button onclick="editQuote(${idx})" class="bg-yellow-500 text-white px-2 py-1 rounded text-xs">แก้ไข</button>
+                  <button onclick="deleteQuote('${q.quoteId}')" class="bg-red-500 text-white px-2 py-1 rounded text-xs">ลบ</button>
+                </td>
+              </tr>`;
+          });
+        }
+      })
+      .catch(err => console.error("Load Quotes Error:", err));
+    }
+
+    function editQuote(index) {
+      const q = window.myQuotesCache[index];
+      editingQuoteId = q.quoteId;
+      document.getElementById('cust-name').value = q.customerName;
+      document.getElementById('car-reg').value = q.carReg;
+      try {
+        comparisonItems = JSON.parse(q.details) || [];
+      } catch(e) { comparisonItems = []; }
+      
+      if (q.agentId) {
+        if (!currentAgent) currentAgent = {};
+        currentAgent.id = q.agentId;
+      }
+
+      renderTable();
+      alert(`กำลังโหลดใบเสนอราคา ${q.quoteId} เพื่อแก้ไข สามารถปรับเปลี่ยนข้อมูลแล้วกดส่ง Flex หรือดูตัวอย่างเพื่อบันทึกทับได้ทันที`);
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+
+    function deleteQuote(quoteId) {
+      if(!confirm("ต้องการลบใบเสนอราคานี้ใช่หรือไม่?")) return;
+      fetch(GAS_API_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+        body: JSON.stringify({ action: 'deleteQuote', quoteId: quoteId })
+      })
+      .then(res => res.json())
+      .then(result => {
+        if(result.status === 'success') loadAgentQuotations();
+      });
+    }
+
+    function checkCarTypeOther() {
+      const carTypeSelect = document.getElementById('car-type');
+      const otherInput = document.getElementById('car-type-other');
+      if (carTypeSelect.value === 'อื่นๆ') {
+        otherInput.classList.remove('hidden');
+        otherInput.focus();
+      } else {
+        otherInput.classList.add('hidden');
+        otherInput.value = '';
+      }
+    }
+
+    function convertA4ToImage() {
+      const element = document.getElementById('a4-document');
+      html2canvas(element, { scale: 2, useCORS: true }).then(canvas => {
+        const imgData = canvas.toDataURL("image/png");
+        const outputDiv = document.getElementById('image-output');
+        outputDiv.innerHTML = '';
+        const imgElement = document.createElement('img');
+        imgElement.src = imgData;
+        imgElement.style.maxWidth = '100%';
+        imgElement.style.borderRadius = '8px';
+        imgElement.style.border = '1px solid #ccc';
+        outputDiv.appendChild(imgElement);
+        document.getElementById('image-preview-container').classList.remove('hidden');
+        alert("แปลงภาพสำเร็จ! กรุณากดค้างที่รูปภาพด้านล่างเพื่อบันทึกภาพลงมือถือครับ");
+      }).catch(err => {
+        alert("ไม่สามารถแปลงตารางเป็นรูปภาพได้ กรุณาลองใหม่อีกครั้ง");
+      });
+    }
+
+    function sendFlexFromPreview() {
+      const custName = document.getElementById('cust-name').value.trim();
+      const carReg = document.getElementById('car-reg').value.trim();
+      if(!custName || !carReg) return alert("กรุณากรอกชื่อลูกค้าและทะเบียนรถก่อนส่ง");
+      if(comparisonItems.length === 0) return alert("ไม่มีรายการเปรียบเทียบ");
+
+      const targetUserId = prompt("กรุณากรอก LINE User ID ของลูกค้าที่ต้องการส่ง Flex Message:");
+      if (!targetUserId) return;
+
+      const actionType = editingQuoteId ? 'editQuote' : 'saveQuote';
+      const quotePayload = {
+        quoteId: editingQuoteId || "",
+        agentId: currentAgent.id,
+        customerName: custName,
+        carReg: carReg,
+        items: comparisonItems,
+        targetUserId: targetUserId
+      };
+
+      fetch(GAS_API_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+        body: JSON.stringify({ action: actionType, quoteData: quotePayload })
+      })
+      .then(res => res.json())
+      .then(result => {
+        if(result.status === 'success') {
+          alert("บันทึกและส่ง Flex Message ให้ลูกค้าเรียบร้อยแล้ว!");
+          closePreview();
+          editingQuoteId = null;
+          comparisonItems = [];
+          renderTable();
+          document.getElementById('cust-name').value = '';
+          document.getElementById('car-reg').value = '';
+          document.getElementById('car-model').value = '';
+          loadAgentQuotations();
+        } else {
+          alert("เกิดข้อผิดพลาด: " + (result.message || "ไม่ทราบสาเหตุ"));
+        }
+      })
+      .catch(err => {
+        console.error("Preview Send Error:", err);
+        alert("ไม่สามารถเชื่อมต่อเพื่อส่งข้อความได้");
+      });
+    }
+  </script>
+</body>
+</html>
